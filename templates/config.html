@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% set title = "Configurações" %}
+{% block content %}
+<section class="pagehead">
+  <div><h1 class="h1">Configurações</h1><p class="muted">Defina saldo inicial e mês de início.</p></div>
+</section>
+
+<form class="form card" method="post">
+  <div class="form__grid">
+    <label class="field">
+      <span class="field__label">Saldo inicial</span>
+      <input name="saldo_inicial" value="{{ cfg.saldo_inicial or 0 }}" placeholder="0.00" />
+      <div class="hint muted">Ex.: saldo em conta no início do controle.</div>
+    </label>
+
+    <label class="field">
+      <span class="field__label">Competência de início (AAAA-MM)</span>
+      <input name="competencia_inicio" value="{{ cfg.competencia_inicio }}" placeholder="2026-02" />
+      <div class="hint muted">A partir de qual mês o saldo acumulado soma.</div>
+    </label>
+  </div>
+
+  <div class="form__actions">
+    <button class="btn" type="submit">Salvar</button>
+    <a class="btn btn--ghost" href="{{ url_for('home') }}">Voltar</a>
+  </div>
+</form>
+{% endblock %}

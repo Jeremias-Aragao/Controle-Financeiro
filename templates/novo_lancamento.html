@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% set title = "Novo lançamento" %}
+{% block content %}
+<section class="pagehead">
+  <div><h1 class="h1">Novo lançamento</h1><p class="muted">Competência: <span class="pill">{{ competencia }}</span></p></div>
+  <div class="actions"><a class="btn btn--ghost" href="{{ url_for('mes', competencia=competencia) }}">⬅️ Voltar</a></div>
+</section>
+
+<form class="form card" method="post">
+  <div class="form__grid">
+    <label class="field">
+      <span class="field__label">Tipo</span>
+      <select name="tipo" required>
+        <option value="PASSIVO">PASSIVO (sai)</option>
+        <option value="ATIVO">ATIVO (entra)</option>
+      </select>
+    </label>
+
+    <label class="field">
+      <span class="field__label">Categoria</span>
+      <input name="categoria" placeholder="Ex.: Moradia, Transporte, Renda..." />
+    </label>
+
+    <label class="field field--full">
+      <span class="field__label">Descrição</span>
+      <input name="descricao" placeholder="Ex.: Faculdade ESUDA, Aluguel, Hydra..." required />
+    </label>
+
+    <label class="field">
+      <span class="field__label">Data (vencimento/recebimento)</span>
+      <input type="date" name="data_evento" required />
+    </label>
+
+    <label class="field">
+      <span class="field__label">Valor</span>
+      <input type="number" step="0.01" name="valor" required />
+    </label>
+  </div>
+
+  <div class="form__actions">
+    <button class="btn" type="submit">Salvar</button>
+    <a class="btn btn--ghost" href="{{ url_for('mes', competencia=competencia) }}">Cancelar</a>
+  </div>
+</form>
+{% endblock %}

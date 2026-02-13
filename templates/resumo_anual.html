@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% set title = "Resumo anual " ~ ano %}
+{% block content %}
+<section class="pagehead">
+  <div><h1 class="h1">Resumo anual: <span class="pill">{{ ano }}</span></h1><p class="muted">Somente baixados.</p></div>
+</section>
+
+<section class="grid2">
+  <div class="card"><div class="card__label">Total pago</div><div class="card__value">R$ {{ "%.2f"|format(total_pago) }}</div></div>
+  <div class="card"><div class="card__label">Total recebido</div><div class="card__value">R$ {{ "%.2f"|format(total_recebido) }}</div></div>
+</section>
+
+<section class="card card--accent">
+  <div class="card__label">Resultado do ano</div>
+  <div class="card__value">R$ {{ "%.2f"|format(resultado) }}</div>
+</section>
+
+<section class="panel">
+  <div class="panel__head"><h2 class="h2">📆 Mês a mês</h2><span class="badge">Baixados</span></div>
+  {% if months|length == 0 %}
+    <div class="empty">Ainda não há lançamentos baixados neste ano.</div>
+  {% else %}
+    <div class="table">
+      <div class="table__row table__row--head"><div>Competência</div><div class="right">Recebido</div><div class="right">Pago</div><div class="right">Resultado</div><div class="right">Acessar</div></div>
+      {% for m in months %}
+      <div class="table__row">
+        <div class="strong">{{ m.competencia }}</div>
+        <div class="right">R$ {{ "%.2f"|format(m.recebido) }}</div>
+        <div class="right">R$ {{ "%.2f"|format(m.pago) }}</div>
+        <div class="right"><b>R$ {{ "%.2f"|format(m.resultado) }}</b></div>
+        <div class="right"><a class="btn btn--small" href="{{ url_for('mes', competencia=m.competencia) }}">Abrir</a></div>
+      </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

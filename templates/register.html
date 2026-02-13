@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% set title = "Criar conta" %}
+{% block content %}
+<section class="pagehead">
+  <div>
+    <h1 class="h1">Criar conta</h1>
+    <p class="muted">Cada usuário terá seu próprio controle (dados isolados).</p>
+  </div>
+</section>
+
+<form class="form card" method="post">
+  <div class="form__grid">
+    <label class="field field--full">
+      <span class="field__label">Nome</span>
+      <input name="name" required placeholder="Seu nome" />
+    </label>
+
+    <label class="field field--full">
+      <span class="field__label">E-mail</span>
+      <input name="email" type="email" required placeholder="seu@email.com" />
+    </label>
+
+    <label class="field field--full">
+      <span class="field__label">Senha</span>
+      <input name="password" type="password" required />
+      <div class="hint muted">Dica: use uma senha forte.</div>
+    </label>
+  </div>
+
+  <div class="form__actions">
+    <button class="btn" type="submit">Criar</button>
+    <a class="btn btn--ghost" href="{{ url_for('login') }}">Já tenho conta</a>
+  </div>
+</form>
+{% endblock %}

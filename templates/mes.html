@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% set title = "Mês " ~ competencia %}
+{% block content %}
+
+<section class="pagehead">
+  <div>
+    <h1 class="h1">
+      Mês: <span class="pill">{{ competencia }}</span>
+      <span class="muted small">Hoje: {{ hoje }}</span>
+    </h1>
+    <p class="muted">
+      Saldo inicial do mês: <b>R$ {{ "%.2f"|format(saldo_ini_mes) }}</b> •
+      Saldo final (baixado): <b>R$ {{ "%.2f"|format(saldo_final_mes) }}</b>
+    </p>
+  </div>
+
+  <div class="actions">
+    <a class="btn btn--ghost" href="{{ url_for('mes', competencia=prev_comp) }}">⬅️ {{ prev_comp }}</a>
+    <a class="btn btn--ghost" href="{{ url_for('mes', competencia=next_comp) }}">{{ next_comp }} ➡️</a>
+    <a class="btn" href="{{ url_for('novo', competencia=competencia) }}">➕ Novo</a>
+  </div>
+</section>
+
+<section class="grid4">
+  <div class="card"><div class="card__label">Passivo (baixado)</div><div class="card__value">R$ {{ "%.2f"|format(total_passivo_baixado) }}</div><div class="card__hint muted">Já pago</div></div>
+  <div class="card"><div class="card__label">Passivo (pendente)</div><div class="card__value">R$ {{ "%.2f"|format(passivo_pendente) }}</div><div class="card__hint muted">A pagar</div></div>
+  <div class="card"><div class="card__label">Ativo (baixado)</div><div class="card__value">R$ {{ "%.2f"|format(total_ativo_baixado) }}</div><div class="card__hint muted">Já recebido</div></div>
+  <div class="card"><div class="card__label">Ativo (pendente)</div><div class="card__value">R$ {{ "%.2f"|format(ativo_pendente) }}</div><div class="card__hint muted">A receber</div></div>
+</section>
+
+<section class="grid2">
+  <div class="card card--accent"><div class="card__label">Resultado (baixado)</div><div class="card__value">R$ {{ "%.2f"|format(resultado_baixado) }}</div><div class="card__hint muted">Somente baixados</div></div>
+  <div class="card card--accent2"><div class="card__label">Resultado (projetado)</div><div class="card__value">R$ {{ "%.2f"|format(resultado_projetado) }}</div><div class="card__hint muted">Baixado + pendente</div></div>
+</section>
+
+<section class="grid2">
+  <div class="panel">
+    <div class="panel__head"><h2 class="h2">🔴 Passivo</h2><span class="badge">Vencimento / Status</span></div>
+    {% if passivo|length == 0 %}
+      <div class="empty">Sem lançamentos de passivo neste mês.</div>
+    {% else %}
+      <div class="table">
+        <div class="table__row table__row--head">
+          <div>Descrição</div><div>Categoria</div><div>Data</div><div class="center">Dias</div><div class="right">Valor</div><div>Status</div><div class="right">Ações</div>
+        </div>
+        {% for l in passivo %}
+        <div class="table__row">
+          <div class="strong">{{ l['descricao'] }}</div>
+          <div class="muted">{{ l['categoria'] or "-" }}</div>
+          <div class="muted">{{ l['data_evento'] }}</div>
+          <div class="center">
+            {% if l['status'] == 'BAIXADO' %}<span class="pill2 pill2--ok">✓</span>
+            {% else %}
+              {% if l['dias'] < 0 %}<span class="pill2 pill2--bad">{{ l['dias'] }}</span>
+              {% elif l['dias'] == 0 %}<span class="pill2 pill2--warn">0</span>
+              {% else %}<span class="pill2">{{ l['dias'] }}</span>{% endif %}
+            {% endif %}
+          </div>
+          <div class="right">R$ {{ "%.2f"|format(l['valor']) }}</div>
+          <div>{% if l['status'] == 'BAIXADO' %}<span class="status status--ok">BAIXADO</span>{% else %}<span class="status status--warn">PENDENTE</span>{% endif %}</div>
+          <div class="right actions2">
+            <a class="btn btn--small" href="{{ url_for('toggle', id=l['id'], competencia=competencia) }}">{% if l['status'] == 'BAIXADO' %}Voltar{% else %}Pagar{% endif %}</a>
+            <a class="btn btn--small btn--ghost" href="{{ url_for('editar', id=l['id'], competencia=competencia) }}">Editar</a>
+            <form method="post" action="{{ url_for('excluir', id=l['id'], competencia=competencia) }}" onsubmit="return confirm('Excluir este lançamento?');">
+              <button class="btn btn--small btn--danger" type="submit">Excluir</button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="panel__head"><h2 class="h2">🟢 Ativo</h2><span class="badge">Recebimento / Status</span></div>
+    {% if ativo|length == 0 %}
+      <div class="empty">Sem lançamentos de ativo neste mês.</div>
+    {% else %}
+      <div class="table">
+        <div class="table__row table__row--head">
+          <div>Descrição</div><div>Categoria</div><div>Data</div><div class="center">Dias</div><div class="right">Valor</div><div>Status</div><div class="right">Ações</div>
+        </div>
+        {% for l in ativo %}
+        <div class="table__row">
+          <div class="strong">{{ l['descricao'] }}</div>
+          <div class="muted">{{ l['categoria'] or "-" }}</div>
+          <div class="muted">{{ l['data_evento'] }}</div>
+          <div class="center">
+            {% if l['status'] == 'BAIXADO' %}<span class="pill2 pill2--ok">✓</span>
+            {% else %}
+              {% if l['dias'] < 0 %}<span class="pill2 pill2--bad">{{ l['dias'] }}</span>
+              {% elif l['dias'] == 0 %}<span class="pill2 pill2--warn">0</span>
+              {% else %}<span class="pill2">{{ l['dias'] }}</span>{% endif %}
+            {% endif %}
+          </div>
+          <div class="right">R$ {{ "%.2f"|format(l['valor']) }}</div>
+          <div>{% if l['status'] == 'BAIXADO' %}<span class="status status--ok">BAIXADO</span>{% else %}<span class="status status--warn">PENDENTE</span>{% endif %}</div>
+          <div class="right actions2">
+            <a class="btn btn--small" href="{{ url_for('toggle', id=l['id'], competencia=competencia) }}">{% if l['status'] == 'BAIXADO' %}Voltar{% else %}Receber{% endif %}</a>
+            <a class="btn btn--small btn--ghost" href="{{ url_for('editar', id=l['id'], competencia=competencia) }}">Editar</a>
+            <form method="post" action="{{ url_for('excluir', id=l['id'], competencia=competencia) }}" onsubmit="return confirm('Excluir este lançamento?');">
+              <button class="btn btn--small btn--danger" type="submit">Excluir</button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="note">
+  <div class="note__title">⚙️ Controle do saldo</div>
+  <div class="note__text muted">
+    O saldo acumulado usa <b>Saldo inicial</b> e <b>Competência de início</b>. Ajuste em <a class="link" href="{{ url_for('config') }}">Config</a>.
+  </div>
+</section>
+
+{% endblock %}
