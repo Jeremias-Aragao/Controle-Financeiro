@@ -95,7 +95,7 @@ def create_app() -> Flask:
 
     with app.app_context():
         db.create_all()
-        @app.context_processor
+    @app.context_processor
     def inject_datetime():
         return {"datetime": datetime}    
 
