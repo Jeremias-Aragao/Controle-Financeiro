@@ -48,7 +48,8 @@ export ADMIN_PASSWORD="sua_senha"
 2) Após criar o admin, remova `ADMIN_PASSWORD` das variáveis de ambiente.
 3) Se usar cadastro via tela, defina `ALLOW_FIRST_ADMIN_FROM_REGISTER=true` só temporariamente e volte para `false` após criar o primeiro admin.
 4) Nunca suba senha no GitHub.
-5) Sempre use `SECRET_KEY` forte.
+5) `SECRET_KEY` é obrigatória em produção (a aplicação falha ao iniciar sem ela).
+6) Sempre use `SECRET_KEY` forte.
 
 ## Deploy no Render (usando o banco existente `financeiro-magnata-db`)
 1) Suba este projeto no GitHub.

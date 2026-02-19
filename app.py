@@ -4,6 +4,7 @@ import os
 import re
 from datetime import datetime, date
 
+import click
 from flask import Flask, render_template, request, redirect, url_for, flash, abort
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy
@@ -11,6 +12,15 @@ from sqlalchemy import inspect, text
 from werkzeug.security import generate_password_hash, check_password_hash
 
 COMP_RE = re.compile(r"^\d{4}-\d{2}$")
+
+
+def _env_is_true(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_production_env() -> bool:
+    return _env_is_true(os.getenv("RENDER")) or os.getenv("FLASK_ENV", "").lower() == "production"
+
 
 db = SQLAlchemy()
 login_manager = LoginManager()
@@ -25,7 +35,12 @@ def create_app() -> Flask:
 
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "magnata-r02-dev-change-me")
+
+    secret_key = os.getenv("SECRET_KEY")
+    if _is_production_env() and not secret_key:
+        raise RuntimeError("SECRET_KEY é obrigatória em produção.")
+
+    app.config["SECRET_KEY"] = secret_key or "magnata-r02-dev-change-me"
 
     db.init_app(app)
     login_manager.init_app(app)
@@ -108,21 +123,21 @@ def create_app() -> Flask:
         def bootstrap_admin() -> None:
             admin_exists = User.query.filter_by(is_admin=True).first()
             if admin_exists:
-                print("Admin bootstrap ignorado: já existe usuário admin.")
+                app.logger.info("admin_bootstrap_skipped_existing_admin")
                 return
 
             email = os.getenv("ADMIN_EMAIL")
             password = os.getenv("ADMIN_PASSWORD")
 
             if not email or not password:
-                print("Nenhum ADMIN criado. Defina ADMIN_EMAIL e ADMIN_PASSWORD.")
+                app.logger.warning("admin_bootstrap_missing_env_credentials")
                 return
 
             admin = User(name="Platform Admin", email=email.strip().lower(), is_admin=True)
             admin.password_hash = generate_password_hash(password)
             db.session.add(admin)
             db.session.commit()
-            print("Admin bootstrap criado com sucesso.")
+            app.logger.info("admin_bootstrap_created_successfully")
 
         @app.cli.command("create-admin")
         def create_admin() -> None:
@@ -130,23 +145,27 @@ def create_app() -> Flask:
             password = os.getenv("ADMIN_PASSWORD")
 
             if not email or not password:
-                print("Defina ADMIN_EMAIL e ADMIN_PASSWORD.")
+                click.echo("Defina ADMIN_EMAIL e ADMIN_PASSWORD.")
+                app.logger.warning("admin_cli_missing_env_credentials")
                 return
 
             if User.query.filter_by(is_admin=True).first():
-                print("Já existe um usuário admin. Operação cancelada.")
+                click.echo("Já existe um usuário admin. Operação cancelada.")
+                app.logger.info("admin_cli_blocked_existing_admin")
                 return
 
             normalized_email = email.strip().lower()
             if User.query.filter_by(email=normalized_email).first():
-                print("Usuário com este e-mail já existe.")
+                click.echo("Usuário com este e-mail já existe.")
+                app.logger.info("admin_cli_blocked_existing_email")
                 return
 
             admin = User(name="Platform Admin", email=normalized_email, is_admin=True)
             admin.password_hash = generate_password_hash(password)
             db.session.add(admin)
             db.session.commit()
-            print("Admin criado com sucesso via CLI.")
+            click.echo("Admin criado com sucesso via CLI.")
+            app.logger.info("admin_cli_created_successfully")
 
         db.create_all()
         ensure_users_admin_column()
@@ -226,7 +245,7 @@ def create_app() -> Flask:
         if current_user.is_authenticated:
             return redirect(url_for("home"))
 
-        allow_first_admin = os.getenv("ALLOW_FIRST_ADMIN_FROM_REGISTER", "false").lower() == "true"
+        allow_first_admin = _env_is_true(os.getenv("ALLOW_FIRST_ADMIN_FROM_REGISTER", "false"))
         admin_exists = User.query.filter_by(is_admin=True).first() is not None
         can_register_first_admin = allow_first_admin and not admin_exists
 
