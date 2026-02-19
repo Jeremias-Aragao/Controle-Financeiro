@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% set title = "Billing" %}
+{% block content %}
+<section class="pagehead">
+  <div>
+    <h1 class="h1">Billing</h1>
+    <p class="muted">Status da organização: <b>{{ org.status }}</b></p>
+  </div>
+</section>
+
+<div class="card">
+  <p>Plano atual: <b>{{ org.plan }}</b></p>
+  <form method="post" action="{{ url_for('billing.checkout', plan='PRO') }}" style="display:inline;"><button class="btn" type="submit">Gerar PIX PRO (R$ {{ plan_price['PRO'] }})</button></form>
+  <form method="post" action="{{ url_for('billing.checkout', plan='AGENCY') }}" style="display:inline;"><button class="btn" type="submit">Gerar PIX AGENCY (R$ {{ plan_price['AGENCY'] }})</button></form>
+  <form method="post" action="{{ url_for('billing.checkout', plan='ENTERPRISE') }}" style="display:inline;"><button class="btn" type="submit">Gerar PIX ENTERPRISE (R$ {{ plan_price['ENTERPRISE'] }})</button></form>
+</div>
+
+{% if last_payment %}
+<div class="card">
+  <h3>Última cobrança</h3>
+  <p>Status: {{ last_payment.status }}</p>
+  {% if last_payment.pix_copia_cola %}<textarea rows="4" style="width:100%;">{{ last_payment.pix_copia_cola }}</textarea>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -15,9 +15,9 @@
   </div>
 
   <div class="actions">
-    <a class="btn btn--ghost" href="{{ url_for('mes', competencia=prev_comp) }}">⬅️ {{ prev_comp }}</a>
-    <a class="btn btn--ghost" href="{{ url_for('mes', competencia=next_comp) }}">{{ next_comp }} ➡️</a>
-    <a class="btn" href="{{ url_for('novo', competencia=competencia) }}">➕ Novo</a>
+    <a class="btn btn--ghost" href="{{ url_for('finance.mes', competencia=prev_comp) }}">⬅️ {{ prev_comp }}</a>
+    <a class="btn btn--ghost" href="{{ url_for('finance.mes', competencia=next_comp) }}">{{ next_comp }} ➡️</a>
+    <a class="btn" href="{{ url_for('finance.novo', competencia=competencia) }}">➕ Novo</a>
   </div>
 </section>
 
@@ -59,9 +59,9 @@
           <div class="right">R$ {{ "%.2f"|format(l['valor']) }}</div>
           <div>{% if l['status'] == 'BAIXADO' %}<span class="status status--ok">BAIXADO</span>{% else %}<span class="status status--warn">PENDENTE</span>{% endif %}</div>
           <div class="right actions2">
-            <a class="btn btn--small" href="{{ url_for('toggle', id=l['id'], competencia=competencia) }}">{% if l['status'] == 'BAIXADO' %}Voltar{% else %}Pagar{% endif %}</a>
-            <a class="btn btn--small btn--ghost" href="{{ url_for('editar', id=l['id'], competencia=competencia) }}">Editar</a>
-            <form method="post" action="{{ url_for('excluir', id=l['id'], competencia=competencia) }}" onsubmit="return confirm('Excluir este lançamento?');">
+            <a class="btn btn--small" href="{{ url_for('finance.toggle', id=l['id'], competencia=competencia) }}">{% if l['status'] == 'BAIXADO' %}Voltar{% else %}Pagar{% endif %}</a>
+            <a class="btn btn--small btn--ghost" href="{{ url_for('finance.editar', id=l['id'], competencia=competencia) }}">Editar</a>
+            <form method="post" action="{{ url_for('finance.excluir', id=l['id'], competencia=competencia) }}" onsubmit="return confirm('Excluir este lançamento?');">
               <button class="btn btn--small btn--danger" type="submit">Excluir</button>
             </form>
           </div>
@@ -96,9 +96,9 @@
           <div class="right">R$ {{ "%.2f"|format(l['valor']) }}</div>
           <div>{% if l['status'] == 'BAIXADO' %}<span class="status status--ok">BAIXADO</span>{% else %}<span class="status status--warn">PENDENTE</span>{% endif %}</div>
           <div class="right actions2">
-            <a class="btn btn--small" href="{{ url_for('toggle', id=l['id'], competencia=competencia) }}">{% if l['status'] == 'BAIXADO' %}Voltar{% else %}Receber{% endif %}</a>
-            <a class="btn btn--small btn--ghost" href="{{ url_for('editar', id=l['id'], competencia=competencia) }}">Editar</a>
-            <form method="post" action="{{ url_for('excluir', id=l['id'], competencia=competencia) }}" onsubmit="return confirm('Excluir este lançamento?');">
+            <a class="btn btn--small" href="{{ url_for('finance.toggle', id=l['id'], competencia=competencia) }}">{% if l['status'] == 'BAIXADO' %}Voltar{% else %}Receber{% endif %}</a>
+            <a class="btn btn--small btn--ghost" href="{{ url_for('finance.editar', id=l['id'], competencia=competencia) }}">Editar</a>
+            <form method="post" action="{{ url_for('finance.excluir', id=l['id'], competencia=competencia) }}" onsubmit="return confirm('Excluir este lançamento?');">
               <button class="btn btn--small btn--danger" type="submit">Excluir</button>
             </form>
           </div>
@@ -112,7 +112,7 @@
 <section class="note">
   <div class="note__title">⚙️ Controle do saldo</div>
   <div class="note__text muted">
-    O saldo acumulado usa <b>Saldo inicial</b> e <b>Competência de início</b>. Ajuste em <a class="link" href="{{ url_for('config') }}">Config</a>.
+    O saldo acumulado usa <b>Saldo inicial</b> e <b>Competência de início</b>. Ajuste em <a class="link" href="{{ url_for('finance.config') }}">Config</a>.
   </div>
 </section>
 

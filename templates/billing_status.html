@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% set title = "Status do pagamento" %}
+{% block content %}
+<section class="pagehead"><h1 class="h1">Status do pagamento PIX</h1></section>
+<div class="card">
+  {% if payment %}
+  <p>ID MP: {{ payment.mp_payment_id }}</p>
+  <p>Status: <b>{{ payment.status }}</b></p>
+  {% if payment.qr_code_data %}
+    <p>QR base64 disponível (renderize no frontend se desejar).</p>
+  {% endif %}
+  {% if payment.pix_copia_cola %}
+    <label class="field field--full"><span class="field__label">PIX copia e cola</span><textarea rows="4">{{ payment.pix_copia_cola }}</textarea></label>
+  {% endif %}
+  {% else %}
+  <p>Nenhuma cobrança encontrada.</p>
+  {% endif %}
+</div>
+{% endblock %}

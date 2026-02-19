@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% set title = "Membros" %}
+{% block content %}
+<section class="pagehead"><h1 class="h1">Membros — {{ org.name }}</h1></section>
+<div class="card">
+  <table class="table">
+    <thead><tr><th>User ID</th><th>Role</th><th>Ação</th></tr></thead>
+    <tbody>
+      {% for m in members %}
+      <tr>
+        <td>{{ m.user_id }}</td>
+        <td>{{ m.role }}</td>
+        <td>
+          <form method="post" style="display:flex;gap:8px;">
+            <input type="hidden" name="membership_id" value="{{ m.id }}">
+            <select name="role"><option>ORG_USER</option><option>ORG_ADMIN</option><option>PLATFORM_ADMIN</option></select>
+            <button class="btn btn--small" type="submit">Atualizar</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

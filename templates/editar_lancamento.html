@@ -3,7 +3,7 @@
 {% block content %}
 <section class="pagehead">
   <div><h1 class="h1">Editar lançamento</h1><p class="muted">Competência: <span class="pill">{{ competencia }}</span></p></div>
-  <div class="actions"><a class="btn btn--ghost" href="{{ url_for('mes', competencia=competencia) }}">⬅️ Voltar</a></div>
+  <div class="actions"><a class="btn btn--ghost" href="{{ url_for('finance.mes', competencia=competencia) }}">⬅️ Voltar</a></div>
 </section>
 
 <form class="form card" method="post">
@@ -47,7 +47,7 @@
 
   <div class="form__actions">
     <button class="btn" type="submit">Salvar</button>
-    <a class="btn btn--ghost" href="{{ url_for('mes', competencia=competencia) }}">Cancelar</a>
+    <a class="btn btn--ghost" href="{{ url_for('finance.mes', competencia=competencia) }}">Cancelar</a>
   </div>
 </form>
 {% endblock %}

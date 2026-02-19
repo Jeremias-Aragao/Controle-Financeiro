@@ -19,13 +19,16 @@
 
       <nav class="nav">
         {% if current_user.is_authenticated %}
-          <a class="nav__link" href="{{ url_for('home') }}">Mês atual</a>
-          <a class="nav__link" href="{{ url_for('config') }}">Config</a>
-          <a class="nav__link" href="{{ url_for('resumo', ano=(datetime.utcnow().year|string)) }}">Resumo {{ datetime.utcnow().year }}</a>
-          <a class="nav__link" href="{{ url_for('logout') }}">Sair</a>
+          <a class="nav__link" href="{{ url_for('finance.home') }}">Mês atual</a>
+          <a class="nav__link" href="{{ url_for('finance.config') }}">Config</a>
+          <a class="nav__link" href="{{ url_for('finance.resumo', ano=(datetime.utcnow().year|string)) }}">Resumo {{ datetime.utcnow().year }}</a>
+          <a class="nav__link" href="{{ url_for('billing.index') }}">Billing</a>
+          <a class="nav__link" href="{{ url_for('org.select_org') }}">Org</a>
+          {% if is_platform_admin %}<a class="nav__link" href="{{ url_for('admin.dashboard') }}">/admin</a>{% endif %}
+          <a class="nav__link" href="{{ url_for('auth.logout') }}">Sair</a>
         {% else %}
-          <a class="nav__link" href="{{ url_for('login') }}">Entrar</a>
-          <a class="nav__link" href="{{ url_for('register') }}">Criar conta</a>
+          <a class="nav__link" href="{{ url_for('auth.login') }}">Entrar</a>
+          <a class="nav__link" href="{{ url_for('auth.register') }}">Criar conta</a>
         {% endif %}
       </nav>
     </div>
