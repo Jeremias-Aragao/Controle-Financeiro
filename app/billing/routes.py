@@ -9,7 +9,7 @@ from decimal import Decimal
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
-from ..decorators import active_org_id, get_active_org, require_org
+from ..decorators import get_active_org, require_org
 from ..extensions import db
 from ..models import Organization, PaymentAttempt, Subscription
 from ..services.mercadopago import MercadoPagoError, MercadoPagoService
@@ -91,13 +91,41 @@ def status():
     return render_template("billing_status.html", org=org, payment=payment)
 
 
+def _parse_signature_header(signature: str) -> tuple[str | None, str | None]:
+    if not signature:
+        return None, None
+    if "=" not in signature:
+        return None, signature.strip()
+
+    parts = {}
+    for chunk in signature.split(","):
+        if "=" not in chunk:
+            continue
+        key, value = chunk.strip().split("=", 1)
+        parts[key.strip()] = value.strip()
+    return parts.get("ts"), parts.get("v1")
+
+
 def _validate_webhook_signature(payload: bytes) -> bool:
     secret = os.getenv("MP_WEBHOOK_SECRET")
     if not secret:
         return True
+
     provided = request.headers.get("x-signature", "")
-    expected = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(provided, expected)
+    ts, v1 = _parse_signature_header(provided)
+
+    expected_raw = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+    if v1 and hmac.compare_digest(v1, expected_raw):
+        return True
+    if not v1 and hmac.compare_digest(provided.strip(), expected_raw):
+        return True
+
+    if ts:
+        expected_with_ts = hmac.new(secret.encode(), f"{ts}.{payload.decode(errors='ignore')}".encode(), hashlib.sha256).hexdigest()
+        if v1 and hmac.compare_digest(v1, expected_with_ts):
+            return True
+
+    return False
 
 
 @webhooks_bp.route("/mercadopago", methods=["POST"])

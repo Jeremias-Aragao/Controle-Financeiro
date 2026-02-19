@@ -17,7 +17,6 @@ class AdminHardeningTests(unittest.TestCase):
         os.unlink(db_path)
         code = r'''
 from app import create_app
-from app.extensions import db
 from app.models import Membership
 
 app = create_app()
@@ -38,6 +37,42 @@ with app.app_context():
         try:
             self.assertEqual(result.returncode, 0, msg=result.stderr)
             self.assertIn("platform_admin_memberships 1", result.stdout)
+        finally:
+            if os.path.exists(db_path):
+                os.remove(db_path)
+
+    def test_invite_accept_redirects_to_login_when_anonymous(self):
+        fd, db_path = tempfile.mkstemp(prefix="cf_inv_", suffix=".db")
+        os.close(fd)
+        os.unlink(db_path)
+        code = r'''
+from datetime import datetime, timedelta
+import hashlib
+from app import create_app
+from app.extensions import db
+from app.models import InviteToken, Organization, User
+
+app = create_app()
+with app.app_context():
+    u = User(name='A', email='a@a.com', password_hash='x')
+    o = Organization(name='Org', slug='org')
+    db.session.add_all([u, o])
+    db.session.commit()
+    token='abc123'
+    db.session.add(InviteToken(org_id=o.id, invited_by_user_id=u.id, token_hash=hashlib.sha256(token.encode()).hexdigest(), role='ORG_USER', expires_at=datetime.utcnow()+timedelta(days=1)))
+    db.session.commit()
+
+client = app.test_client()
+resp = client.get('/org/invite/accept/abc123', follow_redirects=False)
+print(resp.status_code, resp.headers.get('Location',''))
+'''
+        result = self.run_python(
+            code,
+            {"DATABASE_URL": f"sqlite:///{db_path}", "FLASK_ENV": "development", "SECRET_KEY": "dev-secret"},
+        )
+        try:
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertIn("302 /login?next=/org/invite/accept/abc123", result.stdout)
         finally:
             if os.path.exists(db_path):
                 os.remove(db_path)

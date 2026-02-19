@@ -59,13 +59,15 @@ def invite():
 
 
 @bp.route("/invite/accept/<token>")
-@login_required
 def accept_invite(token: str):
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     invite_token = InviteToken.query.filter_by(token_hash=token_hash).first_or_404()
     if invite_token.used_at or invite_token.expires_at < datetime.utcnow():
         flash("Convite inválido ou expirado.")
         return redirect(url_for("org.select_org"))
+
+    if not current_user.is_authenticated:
+        return redirect(url_for("auth.login", next=request.path))
 
     exists = Membership.query.filter_by(user_id=current_user.id, org_id=invite_token.org_id).first()
     if not exists:

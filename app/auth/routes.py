@@ -13,6 +13,13 @@ from ..models import Membership, Organization, User
 bp = Blueprint("auth", __name__)
 
 
+def _safe_next_url() -> str | None:
+    next_url = request.args.get("next") or request.form.get("next")
+    if next_url and next_url.startswith("/") and not next_url.startswith("//"):
+        return next_url
+    return None
+
+
 @bp.route("/register", methods=["GET", "POST"])
 def register():
     if current_user.is_authenticated:
@@ -72,6 +79,10 @@ def login():
             return redirect(url_for("auth.login"))
 
         login_user(user)
+        next_url = _safe_next_url()
+        if next_url:
+            return redirect(next_url)
+
         memberships = Membership.query.filter_by(user_id=user.id).all()
         if len(memberships) == 1:
             session["active_org_id"] = memberships[0].org_id

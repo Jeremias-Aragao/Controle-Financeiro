@@ -32,6 +32,10 @@ def audit(action: str, org_id: int | None = None, payload: dict | None = None) -
     db.session.commit()
 
 
+def _platform_admin_count() -> int:
+    return Membership.query.filter_by(role="PLATFORM_ADMIN").count()
+
+
 @bp.route("/dashboard")
 @login_required
 @require_role("PLATFORM_ADMIN")
@@ -93,6 +97,11 @@ def org_members(org_id: int):
         membership_id = int(request.form.get("membership_id", "0"))
         role = request.form.get("role", "ORG_USER")
         membership = Membership.query.filter_by(id=membership_id, org_id=org_id).first_or_404()
+
+        if membership.role == "PLATFORM_ADMIN" and role != "PLATFORM_ADMIN" and _platform_admin_count() <= 1:
+            flash("Não é permitido remover o último PLATFORM_ADMIN.")
+            return redirect(url_for("admin.org_members", org_id=org.id))
+
         membership.role = role
         db.session.commit()
         audit("admin_change_member_role", org.id, {"membership_id": membership.id, "role": role})
