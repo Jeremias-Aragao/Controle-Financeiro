@@ -17,6 +17,7 @@ Flask + Login + Multiusuário + PostgreSQL (produção)
 - DATABASE_URL (Postgres; Render injeta ao conectar o DB)
 - ADMIN_EMAIL
 - ADMIN_PASSWORD
+- ALLOW_FIRST_ADMIN_FROM_REGISTER (opcional; `true` para mostrar opção de admin na tela de cadastro enquanto não existir admin)
 
 ## Bootstrap seguro do primeiro ADMIN (PLATFORM_ADMIN)
 - O sistema cria o primeiro admin automaticamente **somente se não existir nenhum usuário com `is_admin=True`**.
@@ -45,8 +46,9 @@ export ADMIN_PASSWORD="sua_senha"
 ### Recomendações de segurança
 1) Crie o admin apenas uma vez.
 2) Após criar o admin, remova `ADMIN_PASSWORD` das variáveis de ambiente.
-3) Nunca suba senha no GitHub.
-4) Sempre use `SECRET_KEY` forte.
+3) Se usar cadastro via tela, defina `ALLOW_FIRST_ADMIN_FROM_REGISTER=true` só temporariamente e volte para `false` após criar o primeiro admin.
+4) Nunca suba senha no GitHub.
+5) Sempre use `SECRET_KEY` forte.
 
 ## Deploy no Render (usando o banco existente `financeiro-magnata-db`)
 1) Suba este projeto no GitHub.
@@ -56,7 +58,8 @@ export ADMIN_PASSWORD="sua_senha"
 5) Configure no Web Service:
    - `ADMIN_EMAIL`
    - `ADMIN_PASSWORD` (somente para bootstrap/criação inicial)
+   - `ALLOW_FIRST_ADMIN_FROM_REGISTER=true` (opcional, se quiser aparecer checkbox de admin na tela `/register`)
 6) Faça o primeiro deploy.
-7) Após o admin ser criado, remova `ADMIN_PASSWORD` do ambiente.
+7) Após o admin ser criado, remova `ADMIN_PASSWORD` do ambiente e retorne `ALLOW_FIRST_ADMIN_FROM_REGISTER=false`.
 
 Pronto: app no Render com o banco existente e bootstrap admin seguro.

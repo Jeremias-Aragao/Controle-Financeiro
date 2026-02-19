@@ -226,10 +226,15 @@ def create_app() -> Flask:
         if current_user.is_authenticated:
             return redirect(url_for("home"))
 
+        allow_first_admin = os.getenv("ALLOW_FIRST_ADMIN_FROM_REGISTER", "false").lower() == "true"
+        admin_exists = User.query.filter_by(is_admin=True).first() is not None
+        can_register_first_admin = allow_first_admin and not admin_exists
+
         if request.method == "POST":
             name = request.form.get("name", "").strip()
             email = request.form.get("email", "").strip().lower()
             password = request.form.get("password", "")
+            wants_admin = request.form.get("create_as_admin") == "on"
 
             if not name or not email or not password:
                 flash("Preencha nome, e-mail e senha.")
@@ -239,17 +244,21 @@ def create_app() -> Flask:
                 flash("Este e-mail já está cadastrado. Faça login.")
                 return redirect(url_for("login"))
 
-            u = User(name=name, email=email)
+            is_admin = wants_admin and can_register_first_admin
+            u = User(name=name, email=email, is_admin=is_admin)
             u.set_password(password)
             db.session.add(u)
             db.session.commit()
 
             get_user_config(u.id)
 
-            flash("Conta criada! Agora faça login.")
+            if is_admin:
+                flash("Conta admin criada com sucesso! Faça login.")
+            else:
+                flash("Conta criada! Agora faça login.")
             return redirect(url_for("login"))
 
-        return render_template("register.html")
+        return render_template("register.html", can_register_first_admin=can_register_first_admin)
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
