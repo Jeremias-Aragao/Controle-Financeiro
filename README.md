@@ -15,6 +15,38 @@ Flask + Login + Multiusuário + PostgreSQL (produção)
 ## Variáveis de ambiente (produção)
 - SECRET_KEY
 - DATABASE_URL (Postgres; Render injeta ao conectar o DB)
+- ADMIN_EMAIL
+- ADMIN_PASSWORD
+
+## Bootstrap seguro do primeiro ADMIN (PLATFORM_ADMIN)
+- O sistema cria o primeiro admin automaticamente **somente se não existir nenhum usuário com `is_admin=True`**.
+- O bootstrap usa exclusivamente variáveis de ambiente (`ADMIN_EMAIL` e `ADMIN_PASSWORD`) e hash de senha com `generate_password_hash`.
+- Também existe o comando manual:
+
+```bash
+flask create-admin
+```
+
+### Configurar variáveis de ambiente
+Windows (PowerShell):
+
+```powershell
+setx ADMIN_EMAIL "seu_email"
+setx ADMIN_PASSWORD "sua_senha"
+```
+
+Mac/Linux:
+
+```bash
+export ADMIN_EMAIL="seu_email"
+export ADMIN_PASSWORD="sua_senha"
+```
+
+### Recomendações de segurança
+1) Crie o admin apenas uma vez.
+2) Após criar o admin, remova `ADMIN_PASSWORD` das variáveis de ambiente.
+3) Nunca suba senha no GitHub.
+4) Sempre use `SECRET_KEY` forte.
 
 ## Deploy no Render (passo a passo)
 1) Suba este projeto no GitHub

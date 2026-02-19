@@ -7,6 +7,7 @@ from datetime import datetime, date
 from flask import Flask, render_template, request, redirect, url_for, flash, abort
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import inspect, text
 from werkzeug.security import generate_password_hash, check_password_hash
 
 COMP_RE = re.compile(r"^\d{4}-\d{2}$")
@@ -37,6 +38,7 @@ def create_app() -> Flask:
         name = db.Column(db.String(120), nullable=False)
         email = db.Column(db.String(180), unique=True, nullable=False, index=True)
         password_hash = db.Column(db.String(255), nullable=False)
+        is_admin = db.Column(db.Boolean, nullable=False, default=False)
         created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
         def set_password(self, password: str) -> None:
@@ -94,7 +96,62 @@ def create_app() -> Flask:
         return User.query.get(uid)
 
     with app.app_context():
+        def ensure_users_admin_column() -> None:
+            inspector = inspect(db.engine)
+            columns = {column["name"] for column in inspector.get_columns("users")}
+            if "is_admin" in columns:
+                return
+
+            db.session.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
+            db.session.commit()
+
+        def bootstrap_admin() -> None:
+            admin_exists = User.query.filter_by(is_admin=True).first()
+            if admin_exists:
+                print("Admin bootstrap ignorado: já existe usuário admin.")
+                return
+
+            email = os.getenv("ADMIN_EMAIL")
+            password = os.getenv("ADMIN_PASSWORD")
+
+            if not email or not password:
+                print("Nenhum ADMIN criado. Defina ADMIN_EMAIL e ADMIN_PASSWORD.")
+                return
+
+            admin = User(name="Platform Admin", email=email.strip().lower(), is_admin=True)
+            admin.password_hash = generate_password_hash(password)
+            db.session.add(admin)
+            db.session.commit()
+            print("Admin bootstrap criado com sucesso.")
+
+        @app.cli.command("create-admin")
+        def create_admin() -> None:
+            email = os.getenv("ADMIN_EMAIL")
+            password = os.getenv("ADMIN_PASSWORD")
+
+            if not email or not password:
+                print("Defina ADMIN_EMAIL e ADMIN_PASSWORD.")
+                return
+
+            if User.query.filter_by(is_admin=True).first():
+                print("Já existe um usuário admin. Operação cancelada.")
+                return
+
+            normalized_email = email.strip().lower()
+            if User.query.filter_by(email=normalized_email).first():
+                print("Usuário com este e-mail já existe.")
+                return
+
+            admin = User(name="Platform Admin", email=normalized_email, is_admin=True)
+            admin.password_hash = generate_password_hash(password)
+            db.session.add(admin)
+            db.session.commit()
+            print("Admin criado com sucesso via CLI.")
+
         db.create_all()
+        ensure_users_admin_column()
+        bootstrap_admin()
+
     @app.context_processor
     def inject_datetime():
         return {"datetime": datetime}    
