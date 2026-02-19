@@ -48,13 +48,15 @@ export ADMIN_PASSWORD="sua_senha"
 3) Nunca suba senha no GitHub.
 4) Sempre use `SECRET_KEY` forte.
 
-## Deploy no Render (passo a passo)
-1) Suba este projeto no GitHub
-2) Render -> New -> Web Service -> conecte o repo
-3) Build: pip install -r requirements.txt
-4) Start: gunicorn app:app
-5) Render -> New -> PostgreSQL (free)
-6) Conecte o DB ao Web Service (o Render injeta DATABASE_URL)
-7) Em Environment do Web Service, crie SECRET_KEY
+## Deploy no Render (usando o banco existente `financeiro-magnata-db`)
+1) Suba este projeto no GitHub.
+2) No Render, garanta que o PostgreSQL `financeiro-magnata-db` já está criado.
+3) Render -> New -> Web Service -> conecte o repositório.
+4) O `render.yaml` já está pronto para vincular automaticamente `DATABASE_URL` ao banco `financeiro-magnata-db`.
+5) Configure no Web Service:
+   - `ADMIN_EMAIL`
+   - `ADMIN_PASSWORD` (somente para bootstrap/criação inicial)
+6) Faça o primeiro deploy.
+7) Após o admin ser criado, remova `ADMIN_PASSWORD` do ambiente.
 
-Pronto: URL pública com cadastro e login.
+Pronto: app no Render com o banco existente e bootstrap admin seguro.
