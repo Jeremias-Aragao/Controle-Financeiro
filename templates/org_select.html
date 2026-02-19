@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% set title = "Selecionar organização" %}
+{% block content %}
+<section class="pagehead">
+  <div>
+    <h1 class="h1">Selecionar organização</h1>
+    <p class="muted">Escolha a empresa ativa para trabalhar.</p>
+  </div>
+</section>
+
+<form class="form card" method="post">
+  <label class="field field--full">
+    <span class="field__label">Organização</span>
+    <select name="org_id" required>
+      {% for org in orgs %}
+      <option value="{{ org.id }}" {% if active_org_id == org.id %}selected{% endif %}>{{ org.name }} ({{ org.plan }})</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div class="form__actions">
+    <button class="btn" type="submit">Selecionar</button>
+  </div>
+</form>
+{% endblock %}

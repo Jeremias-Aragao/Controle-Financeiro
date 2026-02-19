@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% set title = "Admin Dashboard" %}
+{% block content %}
+<section class="pagehead">
+  <div>
+    <h1 class="h1">Admin Dashboard</h1>
+    <p class="muted">Gerencie organizações, planos e bloqueios.</p>
+  </div>
+  <div class="actions"><a class="btn" href="{{ url_for('admin.create_org') }}">+ Nova organização</a></div>
+</section>
+
+<div class="card">
+  <table class="table">
+    <thead><tr><th>Nome</th><th>Plano</th><th>Status</th><th>Criada</th><th>Ações</th></tr></thead>
+    <tbody>
+      {% for org in orgs %}
+      <tr>
+        <td>{{ org.name }}</td>
+        <td>{{ org.plan }}</td>
+        <td>{{ org.status }}</td>
+        <td>{{ org.created_at.strftime('%Y-%m-%d') if org.created_at else '-' }}</td>
+        <td>
+          <form method="post" action="{{ url_for('admin.org_status', org_id=org.id) }}" style="display:inline-flex;gap:6px;">
+            <select name="plan"><option>FREE</option><option>PRO</option><option>AGENCY</option><option>ENTERPRISE</option></select>
+            <select name="status"><option>active</option><option>past_due</option><option>blocked</option></select>
+            <button class="btn btn--small" type="submit">Salvar</button>
+          </form>
+          <a class="btn btn--small btn--ghost" href="{{ url_for('admin.org_members', org_id=org.id) }}">Membros</a>
+          <form method="post" action="{{ url_for('admin.billing_override', org_id=org.id) }}" style="display:inline;">
+            <button class="btn btn--small" type="submit">Desbloquear</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

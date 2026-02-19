@@ -25,11 +25,18 @@
       <input name="password" type="password" required />
       <div class="hint muted">Dica: use uma senha forte.</div>
     </label>
+
+    {% if can_register_first_admin %}
+    <label class="field field--full" style="display:flex;gap:8px;align-items:center;">
+      <input name="create_as_admin" type="checkbox" />
+      <span class="field__label" style="margin:0;">Criar como ADMIN inicial (apenas uma vez)</span>
+    </label>
+    {% endif %}
   </div>
 
   <div class="form__actions">
     <button class="btn" type="submit">Criar</button>
-    <a class="btn btn--ghost" href="{{ url_for('login') }}">Já tenho conta</a>
+    <a class="btn btn--ghost" href="{{ url_for('auth.login') }}">Já tenho conta</a>
   </div>
 </form>
 {% endblock %}

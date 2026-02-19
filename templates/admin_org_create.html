@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% set title = "Criar organização" %}
+{% block content %}
+<section class="pagehead"><h1 class="h1">Criar organização</h1></section>
+<form class="form card" method="post">
+  <label class="field field--full"><span class="field__label">Nome da organização</span><input name="name" required></label>
+  <label class="field field--full"><span class="field__label">Plano</span><select name="plan"><option>FREE</option><option>PRO</option><option>AGENCY</option><option>ENTERPRISE</option></select></label>
+  <label class="field field--full"><span class="field__label">Email do ORG_ADMIN</span><input type="email" name="admin_email" required></label>
+  <label class="field field--full"><span class="field__label">Nome do ORG_ADMIN</span><input name="admin_name"></label>
+  <label class="field field--full"><span class="field__label">Senha (apenas se usuário novo)</span><input type="password" name="admin_password"></label>
+  <div class="form__actions"><button class="btn" type="submit">Criar</button></div>
+</form>
+{% endblock %}

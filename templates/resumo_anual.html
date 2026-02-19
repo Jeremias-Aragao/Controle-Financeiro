@@ -28,7 +28,7 @@
         <div class="right">R$ {{ "%.2f"|format(m.recebido) }}</div>
         <div class="right">R$ {{ "%.2f"|format(m.pago) }}</div>
         <div class="right"><b>R$ {{ "%.2f"|format(m.resultado) }}</b></div>
-        <div class="right"><a class="btn btn--small" href="{{ url_for('mes', competencia=m.competencia) }}">Abrir</a></div>
+        <div class="right"><a class="btn btn--small" href="{{ url_for('finance.mes', competencia=m.competencia) }}">Abrir</a></div>
       </div>
       {% endfor %}
     </div>
