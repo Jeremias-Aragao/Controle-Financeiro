@@ -1,18 +1,53 @@
 from __future__ import annotations
 
+"""
+API Flask para integração com Mercado Pago (PIX).
+
+Exemplos rápidos de uso:
+1) Subir aplicação
+   export FLASK_APP=app.py
+   export MP_ACCESS_TOKEN="TEST-..."
+   export MP_WEBHOOK_URL="https://seu-dominio.com/mp/webhook"
+   flask run --host 0.0.0.0 --port 5000
+
+2) Criar cobrança PIX
+   curl -X POST http://localhost:5000/create_pix \
+     -H 'Content-Type: application/json' \
+     -d '{
+       "tenant_id": 1,
+       "invoice_id": 1001,
+       "amount": 59.90,
+       "due_date": "2026-03-10",
+       "external_reference": "INV-1001"
+     }'
+
+3) Simular webhook (em produção o Mercado Pago chama automaticamente)
+   curl -X POST http://localhost:5000/mp/webhook \
+     -H 'Content-Type: application/json' \
+     -d '{"data": {"id": "1234567890"}, "type": "payment"}'
+"""
+
+import json
 import os
-import re
-from datetime import datetime, date
+from datetime import date, datetime, timedelta
+from decimal import Decimal, InvalidOperation
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
-from flask import Flask, render_template, request, redirect, url_for, flash, abort
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
 
-COMP_RE = re.compile(r"^\d{4}-\d{2}$")
+# -----------------------------------------------------------------------------
+# Configuração base
+# -----------------------------------------------------------------------------
 
 db = SQLAlchemy()
-login_manager = LoginManager()
+
+MERCADO_PAGO_API_BASE = "https://api.mercadopago.com"
+INVOICE_STATUS_PENDING = "PENDING"
+INVOICE_STATUS_PAID = "PAID"
+TENANT_STATUS_ACTIVE = "ACTIVE"
+TENANT_STATUS_BLOCKED = "BLOCKED"
 
 
 def create_app() -> Flask:
@@ -24,414 +59,325 @@ def create_app() -> Flask:
 
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "magnata-r02-dev-change-me")
 
     db.init_app(app)
-    login_manager.init_app(app)
-    login_manager.login_view = "login"
 
-    # ---------------- Models ----------------
-    class User(db.Model):
-        __tablename__ = "users"
+    # -------------------------------------------------------------------------
+    # Modelos de dados
+    # -------------------------------------------------------------------------
+    class Tenant(db.Model):
+        __tablename__ = "tenants"
+
         id = db.Column(db.Integer, primary_key=True)
-        name = db.Column(db.String(120), nullable=False)
-        email = db.Column(db.String(180), unique=True, nullable=False, index=True)
-        password_hash = db.Column(db.String(255), nullable=False)
-        created_at = db.Column(db.DateTime, default=datetime.utcnow)
+        status = db.Column(db.String(20), nullable=False, default=TENANT_STATUS_BLOCKED)
+        paid_until = db.Column(db.Date, nullable=True)
+        created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+        updated_at = db.Column(
+            db.DateTime,
+            nullable=False,
+            default=datetime.utcnow,
+            onupdate=datetime.utcnow,
+        )
 
-        def set_password(self, password: str) -> None:
-            self.password_hash = generate_password_hash(password)
+        invoices = db.relationship("Invoice", backref="tenant", lazy=True)
 
-        def check_password(self, password: str) -> bool:
-            return check_password_hash(self.password_hash, password)
+    class Invoice(db.Model):
+        __tablename__ = "invoices"
 
-        @property
-        def is_active(self):  # pragma: no cover
-            return True
-
-        @property
-        def is_authenticated(self):  # pragma: no cover
-            return True
-
-        @property
-        def is_anonymous(self):  # pragma: no cover
-            return False
-
-        def get_id(self):  # pragma: no cover
-            return str(self.id)
-
-    class UserConfig(db.Model):
-        __tablename__ = "user_config"
         id = db.Column(db.Integer, primary_key=True)
-        user_id = db.Column(db.Integer, db.ForeignKey("users.id"), unique=True, nullable=False)
-        saldo_inicial = db.Column(db.Float, default=0.0)
-        competencia_inicio = db.Column(db.String(7), nullable=False)
+        tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
+        amount = db.Column(db.Numeric(12, 2), nullable=False)
+        due_date = db.Column(db.Date, nullable=False)
+        external_reference = db.Column(db.String(120), nullable=False, unique=True, index=True)
+        status = db.Column(db.String(20), nullable=False, default=INVOICE_STATUS_PENDING)
 
-    class Lancamento(db.Model):
-        __tablename__ = "lancamentos"
-        id = db.Column(db.Integer, primary_key=True)
-        user_id = db.Column(db.Integer, db.ForeignKey("users.id"), index=True, nullable=False)
+        # Campo adicional para rastrear pagamento no Mercado Pago.
+        mp_payment_id = db.Column(db.String(60), nullable=True, unique=True, index=True)
 
-        tipo = db.Column(db.String(20), nullable=False)  # ATIVO | PASSIVO
-        descricao = db.Column(db.String(255), nullable=False)
-        categoria = db.Column(db.String(120))
-        competencia = db.Column(db.String(7), index=True, nullable=False)  # AAAA-MM
-        data_evento = db.Column(db.String(10), nullable=False)  # YYYY-MM-DD
-        valor = db.Column(db.Float, nullable=False)
-
-        status = db.Column(db.String(20), nullable=False, default="PENDENTE")  # PENDENTE | BAIXADO
-        data_baixa = db.Column(db.String(10))
-
-        created_at = db.Column(db.DateTime, default=datetime.utcnow)
-        updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    @login_manager.user_loader
-    def load_user(user_id: str):
-        try:
-            uid = int(user_id)
-        except Exception:
-            return None
-        return User.query.get(uid)
+        created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+        updated_at = db.Column(
+            db.DateTime,
+            nullable=False,
+            default=datetime.utcnow,
+            onupdate=datetime.utcnow,
+        )
 
     with app.app_context():
         db.create_all()
-    @app.context_processor
-    def inject_datetime():
-        return {"datetime": datetime}    
 
-    # ---------------- Helpers ----------------
-    def parse_competencia(comp: str) -> str:
-        if not COMP_RE.match(comp):
-            abort(404)
-        return comp
+    # -------------------------------------------------------------------------
+    # Helpers
+    # -------------------------------------------------------------------------
+    def _get_access_token() -> str:
+        token = os.getenv("MP_ACCESS_TOKEN", "").strip()
+        if not token:
+            raise ValueError("MP_ACCESS_TOKEN não configurado")
+        return token
 
-    def month_add(comp: str, delta: int) -> str:
-        y, m = map(int, comp.split("-"))
-        m += delta
-        while m <= 0:
-            m += 12
-            y -= 1
-        while m >= 13:
-            m -= 12
-            y += 1
-        return f"{y:04d}-{m:02d}"
+    def _get_webhook_url() -> str:
+        webhook_url = os.getenv("MP_WEBHOOK_URL", "").strip()
+        if not webhook_url:
+            raise ValueError("MP_WEBHOOK_URL não configurada")
+        return webhook_url
 
-    def today_iso() -> str:
-        return date.today().isoformat()
-
-    def days_to(date_iso: str) -> int:
+    def _parse_amount(value: object) -> Decimal:
         try:
-            d = date.fromisoformat(date_iso)
-        except Exception:
-            return 0
-        return (d - date.today()).days
+            amount = Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValueError("amount inválido") from exc
+        if amount <= 0:
+            raise ValueError("amount deve ser maior que zero")
+        return amount.quantize(Decimal("0.01"))
 
-    def get_user_config(user_id: int) -> UserConfig:
-        cfg = UserConfig.query.filter_by(user_id=user_id).first()
-        if not cfg:
-            now_comp = datetime.now().strftime("%Y-%m")
-            cfg = UserConfig(user_id=user_id, saldo_inicial=0.0, competencia_inicio=now_comp)
-            db.session.add(cfg)
-            db.session.commit()
-        if not cfg.competencia_inicio:
-            cfg.competencia_inicio = datetime.now().strftime("%Y-%m")
-            db.session.commit()
-        return cfg
+    def _parse_due_date(value: object | None) -> date:
+        if value is None:
+            return date.today() + timedelta(days=1)
+        try:
+            return date.fromisoformat(str(value))
+        except ValueError as exc:
+            raise ValueError("due_date inválido. Use YYYY-MM-DD") from exc
 
-    def saldo_acumulado_ate(user_id: int, competencia: str) -> tuple[float, float, float]:
-        cfg = get_user_config(user_id)
-        saldo0 = float(cfg.saldo_inicial or 0.0)
-        comp_ini = cfg.competencia_inicio
+    def _mp_request(method: str, endpoint: str, payload: dict | None = None, headers: dict | None = None) -> dict:
+        token = _get_access_token()
+        final_headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+        if headers:
+            final_headers.update(headers)
 
-        if competencia < comp_ini:
-            return saldo0, 0.0, saldo0
+        data = None
+        if payload is not None:
+            data = json.dumps(payload).encode("utf-8")
 
-        def sum_mes(comp: str) -> float:
-            rows = Lancamento.query.filter_by(user_id=user_id, competencia=comp, status="BAIXADO").all()
-            rec = sum(r.valor for r in rows if r.tipo == "ATIVO")
-            pag = sum(r.valor for r in rows if r.tipo == "PASSIVO")
-            return float(rec - pag)
-
-        comp_cursor = comp_ini
-        total = 0.0
-        while comp_cursor < competencia:
-            total += sum_mes(comp_cursor)
-            comp_cursor = month_add(comp_cursor, 1)
-
-        saldo_ini_mes = saldo0 + total
-        resultado_mes = sum_mes(competencia)
-        saldo_final = saldo_ini_mes + resultado_mes
-        return float(saldo_ini_mes), float(resultado_mes), float(saldo_final)
-
-    # ---------------- Auth ----------------
-    @app.route("/register", methods=["GET", "POST"])
-    def register():
-        if current_user.is_authenticated:
-            return redirect(url_for("home"))
-
-        if request.method == "POST":
-            name = request.form.get("name", "").strip()
-            email = request.form.get("email", "").strip().lower()
-            password = request.form.get("password", "")
-
-            if not name or not email or not password:
-                flash("Preencha nome, e-mail e senha.")
-                return redirect(url_for("register"))
-
-            if User.query.filter_by(email=email).first():
-                flash("Este e-mail já está cadastrado. Faça login.")
-                return redirect(url_for("login"))
-
-            u = User(name=name, email=email)
-            u.set_password(password)
-            db.session.add(u)
-            db.session.commit()
-
-            get_user_config(u.id)
-
-            flash("Conta criada! Agora faça login.")
-            return redirect(url_for("login"))
-
-        return render_template("register.html")
-
-    @app.route("/login", methods=["GET", "POST"])
-    def login():
-        if current_user.is_authenticated:
-            return redirect(url_for("home"))
-
-        if request.method == "POST":
-            email = request.form.get("email", "").strip().lower()
-            password = request.form.get("password", "")
-
-            user = User.query.filter_by(email=email).first()
-            if not user or not user.check_password(password):
-                flash("E-mail ou senha inválidos.")
-                return redirect(url_for("login"))
-
-            login_user(user)
-            return redirect(url_for("home"))
-
-        return render_template("login.html")
-
-    @app.route("/logout")
-    @login_required
-    def logout():
-        logout_user()
-        flash("Você saiu.")
-        return redirect(url_for("login"))
-
-    # ---------------- App ----------------
-    @app.route("/")
-    def root():
-        return redirect(url_for("home" if current_user.is_authenticated else "login"))
-
-    @app.route("/home")
-    @login_required
-    def home():
-        hoje = datetime.now().strftime("%Y-%m")
-        return redirect(url_for("mes", competencia=hoje))
-
-    @app.route("/config", methods=["GET", "POST"])
-    @login_required
-    def config():
-        cfg = get_user_config(current_user.id)
-
-        if request.method == "POST":
-            saldo_inicial = request.form.get("saldo_inicial", "0").replace(",", ".").strip()
-            competencia_inicio = request.form.get("competencia_inicio", "").strip()
-            if not COMP_RE.match(competencia_inicio):
-                flash("Competência de início inválida. Use AAAA-MM (ex.: 2026-02).")
-                return redirect(url_for("config"))
-
-            try:
-                saldo_val = float(saldo_inicial)
-            except Exception:
-                saldo_val = 0.0
-
-            cfg.saldo_inicial = saldo_val
-            cfg.competencia_inicio = competencia_inicio
-            db.session.commit()
-            flash("Configurações salvas.")
-            return redirect(url_for("home"))
-
-        return render_template("config.html", cfg=cfg)
-
-    @app.route("/mes/<competencia>")
-    @login_required
-    def mes(competencia):
-        competencia = parse_competencia(competencia)
-        prev_comp = month_add(competencia, -1)
-        next_comp = month_add(competencia, 1)
-
-        rows = (
-            Lancamento.query.filter_by(user_id=current_user.id, competencia=competencia)
-            .order_by(Lancamento.data_evento.asc(), Lancamento.id.asc())
-            .all()
+        req = Request(
+            url=f"{MERCADO_PAGO_API_BASE}{endpoint}",
+            data=data,
+            method=method.upper(),
+            headers=final_headers,
         )
 
-        passivo, ativo = [], []
-        for r in rows:
-            d = {
-                "id": r.id,
-                "tipo": r.tipo,
-                "descricao": r.descricao,
-                "categoria": r.categoria,
-                "competencia": r.competencia,
-                "data_evento": r.data_evento,
-                "valor": float(r.valor),
-                "status": r.status,
-                "data_baixa": r.data_baixa,
+        try:
+            with urlopen(req, timeout=20) as response:
+                raw = response.read().decode("utf-8")
+                return json.loads(raw) if raw else {}
+        except HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="ignore")
+            raise RuntimeError(f"Erro Mercado Pago HTTP {exc.code}: {body}") from exc
+        except URLError as exc:
+            raise RuntimeError(f"Falha de conexão com Mercado Pago: {exc}") from exc
+
+    def _extract_payment_id_from_webhook() -> str | None:
+        payload = request.get_json(silent=True) or {}
+
+        # Formato comum:
+        # {"type":"payment", "data":{"id":"123"}}
+        data_id = payload.get("data", {}).get("id")
+        if data_id:
+            return str(data_id)
+
+        # Alguns cenários incluem apenas "id" no corpo.
+        if payload.get("id"):
+            return str(payload["id"])
+
+        # Fallback por query string:
+        # /mp/webhook?type=payment&data.id=123
+        q_data_id = request.args.get("data.id")
+        if q_data_id:
+            return q_data_id
+
+        # Outro fallback comum: /mp/webhook?id=123
+        q_id = request.args.get("id")
+        if q_id:
+            return q_id
+
+        return None
+
+    def _activate_tenant_after_payment(tenant: Tenant) -> None:
+        """Regra simples: ativa tenant e estende 30 dias após o maior entre hoje e paid_until."""
+        today = date.today()
+        base_date = tenant.paid_until if tenant.paid_until and tenant.paid_until > today else today
+        tenant.status = TENANT_STATUS_ACTIVE
+        tenant.paid_until = base_date + timedelta(days=30)
+
+    # -------------------------------------------------------------------------
+    # Endpoints
+    # -------------------------------------------------------------------------
+    @app.post("/create_pix")
+    def create_pix():
+        """
+        Cria cobrança PIX no Mercado Pago usando /v1/payments.
+
+        Entrada JSON:
+        {
+          "tenant_id": 1,
+          "invoice_id": 1001,
+          "amount": 59.90,
+          "due_date": "2026-03-10",                # opcional
+          "external_reference": "INV-1001"         # opcional
+        }
+        """
+        body = request.get_json(silent=True) or {}
+
+        tenant_id = body.get("tenant_id")
+        invoice_id = body.get("invoice_id")
+        amount_raw = body.get("amount")
+
+        if tenant_id is None or invoice_id is None or amount_raw is None:
+            return jsonify({"error": "tenant_id, invoice_id e amount são obrigatórios"}), 400
+
+        try:
+            tenant_id = int(tenant_id)
+            invoice_id = int(invoice_id)
+            amount = _parse_amount(amount_raw)
+            due_date = _parse_due_date(body.get("due_date"))
+            _ = _get_access_token()
+            webhook_url = _get_webhook_url()
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        tenant = Tenant.query.get(tenant_id)
+        if tenant is None:
+            tenant = Tenant(id=tenant_id, status=TENANT_STATUS_BLOCKED)
+            db.session.add(tenant)
+            db.session.flush()
+
+        invoice = Invoice.query.get(invoice_id)
+        if invoice is None:
+            external_reference = str(body.get("external_reference") or f"INV-{invoice_id}")
+            invoice = Invoice(
+                id=invoice_id,
+                tenant_id=tenant.id,
+                amount=amount,
+                due_date=due_date,
+                external_reference=external_reference,
+                status=INVOICE_STATUS_PENDING,
+            )
+            db.session.add(invoice)
+            db.session.flush()
+        else:
+            if invoice.tenant_id != tenant.id:
+                return jsonify({"error": "invoice_id não pertence ao tenant_id informado"}), 400
+
+        if invoice.status == INVOICE_STATUS_PAID:
+            return jsonify({"error": "fatura já está paga"}), 409
+
+        # Idempotência: mesma chave para evitar duplicidade ao recriar a mesma cobrança.
+        idempotency_key = f"pix-invoice-{invoice.id}-tenant-{tenant.id}-amount-{str(amount)}"
+
+        payload = {
+            "transaction_amount": float(amount),
+            "description": f"Invoice #{invoice.id}",
+            "payment_method_id": "pix",
+            "external_reference": invoice.external_reference,
+            "notification_url": webhook_url,
+            "payer": {
+                # Para produção, use e-mail real do cliente.
+                "email": "cliente@example.com"
+            },
+        }
+
+        try:
+            mp_response = _mp_request(
+                method="POST",
+                endpoint="/v1/payments",
+                payload=payload,
+                headers={"X-Idempotency-Key": idempotency_key},
+            )
+        except RuntimeError as exc:
+            db.session.rollback()
+            return jsonify({"error": str(exc)}), 502
+
+        payment_id = str(mp_response.get("id", ""))
+        qr_data = mp_response.get("point_of_interaction", {}).get("transaction_data", {})
+        qr_code = qr_data.get("qr_code")
+        qr_code_base64 = qr_data.get("qr_code_base64")
+
+        if not payment_id:
+            db.session.rollback()
+            return jsonify({"error": "Mercado Pago não retornou payment id"}), 502
+
+        invoice.mp_payment_id = payment_id
+        invoice.status = INVOICE_STATUS_PENDING
+        db.session.commit()
+
+        return jsonify(
+            {
+                "invoice_id": invoice.id,
+                "tenant_id": tenant.id,
+                "status": invoice.status,
+                "mp_payment_id": payment_id,
+                "qr_code": qr_code,
+                "qr_code_base64": qr_code_base64,
+                "mercado_pago": mp_response,
             }
-            d["dias"] = days_to(d["data_evento"])
+        ), 201
 
-            if d["tipo"] == "PASSIVO":
-                passivo.append(d)
-            else:
-                ativo.append(d)
+    @app.post("/mp/webhook")
+    def mercado_pago_webhook():
+        """
+        Webhook do Mercado Pago.
 
-        total_passivo_baixado = sum(l["valor"] for l in passivo if l["status"] == "BAIXADO")
-        total_ativo_baixado = sum(l["valor"] for l in ativo if l["status"] == "BAIXADO")
-        passivo_pendente = sum(l["valor"] for l in passivo if l["status"] != "BAIXADO")
-        ativo_pendente = sum(l["valor"] for l in ativo if l["status"] != "BAIXADO")
+        IMPORTANTE: nunca confiar somente no payload recebido.
+        Sempre consulta GET /v1/payments/{payment_id} antes de liberar acesso.
+        """
+        payment_id = _extract_payment_id_from_webhook()
+        if not payment_id:
+            return jsonify({"error": "payment_id não encontrado na notificação"}), 400
 
-        resultado_baixado = total_ativo_baixado - total_passivo_baixado
-        resultado_projetado = (total_ativo_baixado + ativo_pendente) - (total_passivo_baixado + passivo_pendente)
+        try:
+            payment_info = _mp_request(method="GET", endpoint=f"/v1/payments/{payment_id}")
+        except (RuntimeError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 502
 
-        saldo_ini_mes, _res_mes, saldo_final_mes = saldo_acumulado_ate(current_user.id, competencia)
+        # Validação de segurança: status precisa ser approved na API oficial.
+        payment_status = str(payment_info.get("status", "")).lower()
+        if payment_status != "approved":
+            return jsonify(
+                {
+                    "message": "Pagamento ainda não aprovado",
+                    "payment_id": payment_id,
+                    "status": payment_status,
+                }
+            ), 200
 
-        return render_template(
-            "mes.html",
-            competencia=competencia,
-            prev_comp=prev_comp,
-            next_comp=next_comp,
-            passivo=passivo,
-            ativo=ativo,
-            total_passivo_baixado=total_passivo_baixado,
-            total_ativo_baixado=total_ativo_baixado,
-            passivo_pendente=passivo_pendente,
-            ativo_pendente=ativo_pendente,
-            resultado_baixado=resultado_baixado,
-            resultado_projetado=resultado_projetado,
-            saldo_ini_mes=saldo_ini_mes,
-            saldo_final_mes=saldo_final_mes,
-            hoje=today_iso(),
-        )
+        invoice = Invoice.query.filter_by(mp_payment_id=str(payment_id)).first()
+        if invoice is None:
+            external_reference = payment_info.get("external_reference")
+            if external_reference:
+                invoice = Invoice.query.filter_by(external_reference=str(external_reference)).first()
 
-    @app.route("/novo/<competencia>", methods=["GET", "POST"])
-    @login_required
-    def novo(competencia):
-        competencia = parse_competencia(competencia)
+        if invoice is None:
+            return jsonify({"error": "invoice não encontrada para pagamento aprovado"}), 404
 
-        if request.method == "POST":
-            tipo = request.form["tipo"]
-            descricao = request.form["descricao"].strip()
-            categoria = request.form.get("categoria", "").strip() or None
-            data_evento = request.form["data_evento"]
-            valor = float(request.form["valor"])
+        invoice.status = INVOICE_STATUS_PAID
+        tenant = Tenant.query.get(invoice.tenant_id)
+        if tenant is None:
+            return jsonify({"error": "tenant da invoice não encontrado"}), 404
 
-            l = Lancamento(
-                user_id=current_user.id,
-                tipo=tipo,
-                descricao=descricao,
-                categoria=categoria,
-                competencia=competencia,
-                data_evento=data_evento,
-                valor=valor,
-                status="PENDENTE",
-                data_baixa=None,
-            )
-            db.session.add(l)
-            db.session.commit()
-            return redirect(url_for("mes", competencia=competencia))
-
-        return render_template("novo_lancamento.html", competencia=competencia)
-
-    @app.route("/editar/<int:id>/<competencia>", methods=["GET", "POST"])
-    @login_required
-    def editar(id, competencia):
-        competencia = parse_competencia(competencia)
-        l = Lancamento.query.filter_by(id=id, user_id=current_user.id).first_or_404()
-
-        if request.method == "POST":
-            l.tipo = request.form["tipo"]
-            l.descricao = request.form["descricao"].strip()
-            l.categoria = request.form.get("categoria", "").strip() or None
-            l.data_evento = request.form["data_evento"]
-            l.valor = float(request.form["valor"])
-            l.status = request.form.get("status", l.status)
-
-            if l.status == "BAIXADO" and not l.data_baixa:
-                l.data_baixa = today_iso()
-            if l.status != "BAIXADO":
-                l.data_baixa = None
-
-            db.session.commit()
-            return redirect(url_for("mes", competencia=competencia))
-
-        return render_template("editar_lancamento.html", competencia=competencia, l=l)
-
-    @app.route("/toggle/<int:id>/<competencia>")
-    @login_required
-    def toggle(id, competencia):
-        competencia = parse_competencia(competencia)
-        l = Lancamento.query.filter_by(id=id, user_id=current_user.id).first_or_404()
-
-        l.status = "PENDENTE" if l.status == "BAIXADO" else "BAIXADO"
-        l.data_baixa = today_iso() if l.status == "BAIXADO" else None
+        _activate_tenant_after_payment(tenant)
         db.session.commit()
-        return redirect(url_for("mes", competencia=competencia))
 
-    @app.route("/excluir/<int:id>/<competencia>", methods=["POST"])
-    @login_required
-    def excluir(id, competencia):
-        competencia = parse_competencia(competencia)
-        l = Lancamento.query.filter_by(id=id, user_id=current_user.id).first_or_404()
-        db.session.delete(l)
-        db.session.commit()
-        return redirect(url_for("mes", competencia=competencia))
+        return jsonify(
+            {
+                "message": "Pagamento confirmado e tenant ativado",
+                "payment_id": payment_id,
+                "invoice_id": invoice.id,
+                "invoice_status": invoice.status,
+                "tenant_id": tenant.id,
+                "tenant_status": tenant.status,
+                "paid_until": tenant.paid_until.isoformat() if tenant.paid_until else None,
+            }
+        ), 200
 
-    @app.route("/resumo/<ano>")
-    @login_required
-    def resumo(ano):
-        if not re.match(r"^\d{4}$", ano):
-            abort(404)
-
-        q = (
-            db.session.query(Lancamento.competencia)
-            .filter(
-                Lancamento.user_id == current_user.id,
-                Lancamento.competencia.like(f"{ano}-%"),
-                Lancamento.status == "BAIXADO",
-            )
-            .distinct()
-            .order_by(Lancamento.competencia.asc())
-        )
-
-        months = []
-        total_recebido = 0.0
-        total_pago = 0.0
-
-        for (comp,) in q.all():
-            rows = Lancamento.query.filter_by(user_id=current_user.id, competencia=comp, status="BAIXADO").all()
-            recebido = sum(r.valor for r in rows if r.tipo == "ATIVO")
-            pago = sum(r.valor for r in rows if r.tipo == "PASSIVO")
-
-            months.append({"competencia": comp, "recebido": float(recebido), "pago": float(pago), "resultado": float(recebido - pago)})
-            total_recebido += float(recebido)
-            total_pago += float(pago)
-
-        resultado = total_recebido - total_pago
-
-        return render_template(
-            "resumo_anual.html",
-            ano=ano,
-            months=months,
-            total_pago=total_pago,
-            total_recebido=total_recebido,
-            resultado=resultado,
-        )
+    @app.get("/health")
+    def health():
+        return jsonify({"ok": True, "service": "mercado-pago-pix-api"}), 200
 
     return app
 
 
 app = create_app()
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
